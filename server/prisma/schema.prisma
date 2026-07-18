@@ -1,0 +1,225 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// AUTH MODELS
+// ============================================================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String   // bcrypt hashed
+  name      String
+  role      String   @default("Creator") // e.g., Creator, Director, Producer, Editor
+  avatar    String?  // URL or initials
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  refreshTokens       RefreshToken[]
+  ownedScripts        Script[]              @relation("ScriptOwner")
+  scriptCollaborators ScriptCollaborator[]
+  scriptVersions      ScriptVersion[]       @relation("VersionCreator")
+  scriptComments      ScriptComment[]       @relation("CommentAuthor")
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ============================================================
+// SCREENPLAY MODULE MODELS
+// ============================================================
+
+model Script {
+  id         String       @id @default(uuid())
+  title      String       @default("untitled")
+  writerName String       @default("WRITER NAME")
+  draftType  String       @default("Initial Draft")
+  language   String       @default("English")
+  status     ScriptStatus @default(DRAFT)
+  isDeleted  Boolean      @default(false) // soft delete for bin
+  deletedAt  DateTime?
+  ownerId    String
+  owner      User         @relation("ScriptOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  // Relations
+  pages         ScriptPage[]
+  versions      ScriptVersion[]
+  collaborators ScriptCollaborator[]
+  comments      ScriptComment[]
+  characters    ScriptCharacter[]
+
+  @@index([ownerId])
+  @@map("scripts")
+}
+
+enum ScriptStatus {
+  DRAFT
+  IN_REVIEW
+  FINAL
+  ARCHIVED
+}
+
+// Live/current content, one row per page. This is what the editor
+// reads and writes while people are actively working on the script.
+model ScriptPage {
+  id           String   @id @default(uuid())
+  scriptId     String
+  script       Script   @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  pageIndex    Int      // ordering (0-based)
+  content      String   @default("") @db.Text
+  lastEditedBy String?  // userId of last person to touch this page (soft ref, no FK to avoid delete cascades wiping content)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([scriptId, pageIndex])
+  @@index([scriptId])
+  @@map("script_pages")
+}
+
+// A saved point-in-time snapshot of the whole script (all pages),
+// like a Google Docs "version history" entry. Auto-saves and manual
+// saves both create one of these; the actual page content lives in
+// ScriptVersionPage so you can diff/restore individual pages.
+model ScriptVersion {
+  id            String          @id @default(uuid())
+  scriptId      String
+  script        Script          @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  versionNumber Int             // sequential per script, e.g. 1, 2, 3...
+  label         String          // e.g. "Manual save: 12:30 PM" or "Auto-save"
+  type          VersionType     @default(AUTO)
+
+  createdBy String
+  creator   User     @relation("VersionCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  // If this version was created by restoring an older one, point at it
+  restoredFromId String?
+  restoredFrom   ScriptVersion?  @relation("VersionRestore", fields: [restoredFromId], references: [id])
+  restoredInto   ScriptVersion[] @relation("VersionRestore")
+
+  pages ScriptVersionPage[]
+
+  @@unique([scriptId, versionNumber])
+  @@index([scriptId])
+  @@map("script_versions")
+}
+
+enum VersionType {
+  AUTO     // periodic/background autosave
+  MANUAL   // user explicitly clicked "save version"
+  RESTORE  // created by restoring a previous version
+}
+
+// Per-page content frozen inside a specific version snapshot.
+model ScriptVersionPage {
+  id        String        @id @default(uuid())
+  versionId String
+  version   ScriptVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  pageIndex Int
+  content   String        @db.Text
+
+  @@unique([versionId, pageIndex])
+  @@index([versionId])
+  @@map("script_version_pages")
+}
+
+// Multi-user access to a script (who can view/edit, invite status)
+model ScriptCollaborator {
+  id         String            @id @default(uuid())
+  scriptId   String
+  script     Script            @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       CollaboratorRole  @default(EDITOR)
+  status     InviteStatus      @default(ACCEPTED)
+  invitedBy  String?
+  invitedAt  DateTime          @default(now())
+  joinedAt   DateTime?
+
+  @@unique([scriptId, userId])
+  @@index([scriptId])
+  @@index([userId])
+  @@map("script_collaborators")
+}
+
+enum CollaboratorRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+// Comments, Google-Docs style: anchored to a text range on a page,
+// with threaded replies and a resolved state.
+model ScriptComment {
+  id       String  @id @default(uuid())
+  scriptId String
+  script   Script  @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User    @relation("CommentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  text     String  @db.Text
+
+  // Anchoring to a specific selection, so the comment can be pinned
+  // in the margin next to the exact text it refers to
+  pageIndex   Int?
+  startOffset Int?    // character offset within the page content
+  endOffset   Int?
+  quotedText  String? @db.Text // snapshot of the selected text at comment time
+
+  // Threading
+  parentId String?
+  parent   ScriptComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  ScriptComment[] @relation("CommentReplies")
+
+  // Resolution
+  isResolved Boolean   @default(false)
+  resolvedBy String?
+  resolvedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scriptId])
+  @@index([parentId])
+  @@map("script_comments")
+}
+
+model ScriptCharacter {
+  id        String   @id @default(uuid())
+  scriptId  String
+  script    Script   @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  name      String   // uppercase character name, e.g., "ARJUN"
+  createdAt DateTime @default(now())
+
+  @@unique([scriptId, name])
+  @@index([scriptId])
+  @@map("script_characters")
+}

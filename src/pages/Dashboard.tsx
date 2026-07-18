@@ -5,9 +5,11 @@ import {
   Sparkles, Search, ChevronDown, Check, ArrowRight, Clock, Star, Plus 
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   
   // Custom screen/view/screenplay actions
@@ -100,7 +102,7 @@ export function Dashboard() {
             {getGreeting()}
           </h1>
           <p className="text-[#8a8a93] text-base lg:text-lg font-mono font-medium">
-            “ Hello Arjun Krishna
+            {`“ Hello ${user?.name || 'Creator'}`}
           </p>
         </div>
 

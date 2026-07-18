@@ -2,14 +2,18 @@ import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { 
   FileText, Layout, Megaphone, BookOpen, Grid, 
-  FolderKanban, Users, Settings, Trash2, ChevronRight, HelpCircle
+  FolderKanban, Users, Settings, Trash2, ChevronRight, HelpCircle,
+  LogOut
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
 
 export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [suggestionEnabled, setSuggestionEnabled] = useState(true);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Tools in the sidebar
   const sidebarTools = [
@@ -27,6 +31,25 @@ export function Sidebar() {
     { title: 'Community', path: '/team-community', icon: HelpCircle },
     { title: 'Trash', path: '/bin', icon: Trash2 }
   ];
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/auth');
+  };
+
+  // Generate user initials from name
+  const getInitials = (name) => {
+    if (!name) return 'U';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const userInitials = user ? getInitials(user.name) : 'U';
+  const userName = user?.name || 'User';
+  const userRole = user?.role || 'Creator';
 
   return (
     <aside className="w-64 bg-[#0a0a0c] border-r border-white/[0.08] flex flex-col justify-between shrink-0 select-none pb-4 font-sans text-xs">
@@ -148,24 +171,59 @@ export function Sidebar() {
       </div>
 
       {/* User Information Profile Section at Bottom */}
-      <div className="px-3 pt-3 border-t border-white/5">
+      <div className="px-3 pt-3 border-t border-white/5 space-y-2">
+
+        {/* User Profile Card */}
         <div 
           onClick={() => navigate('/settings')}
           className="flex items-center gap-3 p-2 bg-[#141416] hover:bg-[#1c1c1f] rounded-2xl cursor-pointer transition-colors border border-white/5"
         >
-          {/* Neon/Lime Green Box Icon matching mockup */}
+          {/* Neon/Lime Green Box Icon */}
           <div className="w-10 h-10 rounded-xl bg-[#7DDF1D] flex items-center justify-center font-bold text-black shadow-lg shadow-[#7DDF1D]/10">
-            AK
+            {userInitials}
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="font-extrabold text-white text-[11px] truncate leading-tight tracking-wide">
-              ARJUN KRISHNA
+            <h4 className="font-extrabold text-white text-[11px] truncate leading-tight tracking-wide uppercase">
+              {userName}
             </h4>
             <p className="text-[9px] text-[#8a8a93] font-mono mt-0.5 font-semibold truncate">
-              Pro Bubble Chip
+              {userRole}
             </p>
           </div>
         </div>
+
+        {/* Sign Out Button */}
+        {!showLogoutConfirm ? (
+          <button
+            id="sidebar-sign-out"
+            onClick={() => setShowLogoutConfirm(true)}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[#8a8a93] hover:text-red-400 hover:bg-red-500/5 transition-all text-left group border border-transparent hover:border-red-500/10"
+          >
+            <LogOut className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 shrink-0" />
+            <span className="text-[11px] font-medium">Sign Out</span>
+          </button>
+        ) : (
+          <div className="bg-[#141416] border border-red-500/20 rounded-xl p-3 space-y-2.5">
+            <p className="text-[10px] text-[#8a8a93] text-center font-medium">
+              Are you sure you want to sign out?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 py-1.5 text-[10px] font-bold text-[#8a8a93] bg-white/5 hover:bg-white/10 rounded-lg transition-colors uppercase tracking-wider"
+              >
+                Cancel
+              </button>
+              <button
+                id="sidebar-confirm-sign-out"
+                onClick={handleLogout}
+                className="flex-1 py-1.5 text-[10px] font-bold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-colors uppercase tracking-wider"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
     </aside>

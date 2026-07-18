@@ -1,16 +1,113 @@
-# React + Vite
+# BubbleAI — Creative Workplace Suite
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern, premium creative web suite featuring AI-powered screenwriter modules, real-time collaboration, and secure authentication.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Architecture Overview
 
-## React Compiler
+- **Frontend**: React + Vite + CSS (with custom animations and styles)
+- **Backend**: Express + TypeScript + Prisma ORM + PostgreSQL
+- **Real-time Sync**: WebSockets (Socket.io)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## Prerequisites
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Ensure you have the following installed on your system:
+- **Node.js** (v18 or higher recommended)
+- **npm** (v9 or higher)
+- **PostgreSQL** database server running locally or in the cloud
+
+---
+
+## Backend Setup
+
+1. **Navigate to the server directory**:
+   ```bash
+   cd server
+   ```
+
+2. **Install backend dependencies**:
+   ```bash
+   npm install
+   ```
+
+3. **Configure Environment Variables**:
+   Create a `.env` file in the `server` directory (or use/update the existing one):
+   ```env
+   # Database Connection
+   DATABASE_URL="postgresql://postgres:<password>@localhost:5432/bubbleai"
+
+   # JWT Tokens Secret Configuration
+   JWT_SECRET="bubbleai-jwt-secret-dev-only-2024"
+   JWT_REFRESH_SECRET="bubbleai-refresh-secret-dev-only-2024"
+
+   # Server Port & CORS Configuration
+   PORT=5000
+   FRONTEND_URL="http://localhost:5173"
+
+   # Gemini AI API Key (Optional, for screenplay insights)
+   GEMINI_API_KEY=""
+   ```
+
+4. **Initialize Database Schema**:
+   Generate Prisma client and push the PostgreSQL database models:
+   ```bash
+   npx prisma generate
+   npx prisma db push
+   ```
+
+5. **Seed the Database**:
+   Add the default user account (`rohan@bubbletree.com` / `password123`):
+   ```bash
+   npx prisma db seed
+   ```
+
+6. **Start the Backend Dev Server**:
+   ```bash
+   npm run dev
+   ```
+   The backend API will run on **http://localhost:5000/api**.
+
+---
+
+## Frontend Setup
+
+1. **Navigate back to the project root directory**:
+   ```bash
+   cd ..
+   ```
+
+2. **Install frontend dependencies**:
+   ```bash
+   npm install
+   ```
+
+3. **Configure Environment Variables (Optional)**:
+   Create a `.env` file in the root directory to customize the API URL:
+   ```env
+   VITE_API_URL="http://localhost:5000"
+   ```
+   *If omitted, the frontend automatically defaults to `http://localhost:5000`.*
+
+4. **Start the Frontend Dev Server**:
+   ```bash
+   npm run dev
+   ```
+   Open your browser to **http://localhost:5173** to view the app.
+
+---
+
+## Default Login Credentials
+
+Use the default seeded credentials to log in and start writing:
+- **Email**: `rohan@bubbletree.com`
+- **Password**: `password123`
+
+---
+
+## Troubleshooting
+
+- **Database Connection Error (P1000)**: Double-check your `DATABASE_URL` credentials and ensure PostgreSQL is running.
+- **Port Conflict**: If port `5000` or `5173` is already in use, you can edit the `PORT` in the server's `.env` or run vite with a custom port: `npm run dev -- --port <port>`.

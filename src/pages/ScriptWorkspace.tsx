@@ -8,12 +8,13 @@ import {
   Zap, Target, Flame, Globe, Shield, RefreshCw, 
   ChevronLeft, ChevronRight, Grid, Archive, RotateCcw,
   Clock, Heart, DollarSign, Award, Share, Eye,
-  Wand2, Bot, Send, AlignLeft
+  Wand2, Bot, Send, AlignLeft, Trash2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DirectorStrategy, Scene, Shot, ScriptVersion } from '../types';
 import axios from 'axios';
 import { getApiUrl } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ScriptWorkspaceProps {
   script?: string;
@@ -57,8 +58,13 @@ We are building the future, one page at a time.
 He smiles, pressing enter to structure his next sequence with confidence.`
     }
   ]);
+  const { user } = useAuth();
   const [activePageIndex, setActivePageIndex] = useState<number>(0);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  const [activeScriptId, setActiveScriptId] = useState<string | null>(null);
+  const [characterIds, setCharacterIds] = useState<Record<string, string>>({});
+  const [isLoadingScript, setIsLoadingScript] = useState<boolean>(true);
 
   const [screenplayTitle, setScreenplayTitle] = useState('untitled');
   const [writerName, setWriterName] = useState('ARJUN KRISHNA');
@@ -70,6 +76,127 @@ He smiles, pressing enter to structure his next sequence with confidence.`
   const [knownCharacters, setKnownCharacters] = useState<string[]>(['ARJUN', 'KRISHNA', 'NARRATOR']);
   const [detectedNewCharacters, setDetectedNewCharacters] = useState<string[]>([]);
   const [lastCheckedText, setLastCheckedText] = useState<string>("");
+
+  // Load or Create Screenplay Draft on Mount
+  useEffect(() => {
+    const loadOrCreateScript = async () => {
+      setIsLoadingScript(true);
+      try {
+        const listRes = await axios.get(`${getApiUrl()}/scripts`);
+        let script = null;
+
+        if (listRes.data.success && listRes.data.data.length > 0) {
+          script = listRes.data.data[0];
+        } else {
+          const createRes = await axios.post(`${getApiUrl()}/scripts`, {
+            title: 'Untitled Screenplay',
+            writerName: user?.name || 'Rohan',
+            draftType: 'Initial Draft',
+            language: 'English',
+            initialContent: `INT. CREATIVE STUDIO - DAY\n\nA brilliant ray of sunshine filters through the blinds, illuminating a dual widescreen setup. ROHAN, a visionary creative, sits down to draft a ground-breaking screenplay.\n\nROHAN\nThis is where your screenplay begins.\n\nDescribe the scene, characters, and dialogue here.`
+          });
+          if (createRes.data.success) {
+            script = createRes.data.data;
+          }
+        }
+
+        if (script) {
+          const detailRes = await axios.get(`${getApiUrl()}/scripts/${script.id}`);
+          if (detailRes.data.success) {
+            const fullScript = detailRes.data.data;
+            setActiveScriptId(fullScript.id);
+            setScreenplayTitle(fullScript.title);
+            setWriterName(fullScript.writerName);
+            setDraftType(fullScript.draftType);
+
+            if (fullScript.pages && fullScript.pages.length > 0) {
+              setPages(fullScript.pages.map((p: any) => ({
+                id: p.id,
+                content: p.content
+              })));
+            }
+
+            if (fullScript.characters && fullScript.characters.length > 0) {
+              setKnownCharacters(fullScript.characters.map((c: any) => c.name));
+              const charMap: Record<string, string> = {};
+              fullScript.characters.forEach((c: any) => {
+                charMap[c.name] = c.id;
+              });
+              setCharacterIds(charMap);
+            } else {
+              setKnownCharacters(['ARJUN', 'KRISHNA', 'NARRATOR']);
+            }
+
+            try {
+              const commentsRes = await axios.get(`${getApiUrl()}/scripts/${fullScript.id}/comments`);
+              if (commentsRes.data.success) {
+                setComments(commentsRes.data.data.map((c: any) => ({
+                  id: c.id,
+                  user: c.user.name,
+                  text: c.text,
+                  time: new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                })));
+              }
+            } catch (e) {
+              console.error("Failed to load comments:", e);
+            }
+
+            try {
+              const versionsRes = await axios.get(`${getApiUrl()}/scripts/${fullScript.id}/versions`);
+              if (versionsRes.data.success) {
+                setHistory(versionsRes.data.data.map((v: any) => ({
+                  id: v.id,
+                  timestamp: new Date(v.createdAt).getTime(),
+                  content: v.pages ? v.pages.map((p: any) => p.content).join('\n\n') : '',
+                  label: v.label
+                })));
+              }
+            } catch (e) {
+              console.error("Failed to load versions:", e);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load script workspace:", err);
+      } finally {
+        setIsLoadingScript(false);
+      }
+    };
+
+    loadOrCreateScript();
+  }, [user]);
+
+  // Debounced Auto-save to Database
+  useEffect(() => {
+    if (!activeScriptId) return;
+
+    const timer = setTimeout(async () => {
+      setAutoSaveStatus("Saving to database...");
+      try {
+        await axios.put(`${getApiUrl()}/scripts/${activeScriptId}/pages`, {
+          pages: pages.map((p, idx) => ({
+            pageIndex: idx,
+            content: p.content
+          }))
+        });
+
+        await axios.put(`${getApiUrl()}/scripts/${activeScriptId}`, {
+          title: screenplayTitle,
+          writerName: writerName,
+          draftType: draftType
+        });
+
+        const now = new Date();
+        setLastSaved(Date.now());
+        setAutoSaveStatus(`Saved to database at ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`);
+      } catch (err) {
+        console.error("Auto-save failed:", err);
+        setAutoSaveStatus("Auto-save failed. Check connection.");
+      }
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [pages, screenplayTitle, writerName, draftType, activeScriptId]);
 
   // Sidebar Tool toggles and interactive state
   const [showSearch, setShowSearch] = useState<boolean>(false);
@@ -148,44 +275,6 @@ He smiles, pressing enter to structure his next sequence with confidence.`
       setReportLoading(false);
     }
   };
-
-  // 1. AUTO-SAVE HOOK (Saves progress automatically to Local Storage as the user types)
-  useEffect(() => {
-    const savedPages = localStorage.getItem('bt_scrite_pages');
-    const savedTitle = localStorage.getItem('bt_scrite_title');
-    const savedWriter = localStorage.getItem('bt_scrite_writer');
-    const savedDraft = localStorage.getItem('bt_scrite_draft');
-    const savedChars = localStorage.getItem('bt_scrite_characters');
-    const savedSuggestions = localStorage.getItem('bt_scrite_suggestions_enabled');
-
-    if (savedPages) {
-      try { setPages(JSON.parse(savedPages)); } catch (e) {}
-    }
-    if (savedTitle) setScreenplayTitle(savedTitle);
-    if (savedWriter) setWriterName(savedWriter);
-    if (savedDraft) setDraftType(savedDraft);
-    if (savedSuggestions) setSuggestionsEnabled(savedSuggestions === 'true');
-    if (savedChars) {
-      try { setKnownCharacters(JSON.parse(savedChars)); } catch (e) {}
-    }
-  }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      localStorage.setItem('bt_scrite_pages', JSON.stringify(pages));
-      localStorage.setItem('bt_scrite_title', screenplayTitle);
-      localStorage.setItem('bt_scrite_writer', writerName);
-      localStorage.setItem('bt_scrite_draft', draftType);
-      localStorage.setItem('bt_scrite_characters', JSON.stringify(knownCharacters));
-      localStorage.setItem('bt_scrite_suggestions_enabled', String(suggestionsEnabled));
-      
-      const now = new Date();
-      setLastSaved(Date.now());
-      setAutoSaveStatus(`Auto-saved at ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`);
-    }, 1200);
-
-    return () => clearTimeout(timer);
-  }, [pages, screenplayTitle, writerName, draftType, knownCharacters, suggestionsEnabled]);
 
   // 2. LIVE CHARACTER DIALOGUE SCANNER & DETECTOR
   // Checks if user types an uppercase dialogue block for a character not presently in knownCharacters list
@@ -317,17 +406,28 @@ He smiles, pressing enter to structure his next sequence with confidence.`
     }
   };
 
-  const handleBackup = () => {
-    const fullScriptText = pages.map(p => p.content).join('\n\n');
-    const newVersion: ScriptVersion = {
-      id: "v" + (history.length + 1),
-      timestamp: Date.now(),
-      content: fullScriptText,
-      label: `Manual Snapshot: ${new Date().toLocaleTimeString()}`
-    };
-    setHistory([newVersion, ...history]);
-    setShortcutFeedback("Screenplay backed up manually to snapshots history!");
-    setTimeout(() => setShortcutFeedback(""), 4000);
+  const handleBackup = async () => {
+    if (!activeScriptId) return;
+    try {
+      const label = `Manual Snapshot: ${new Date().toLocaleTimeString()}`;
+      const res = await axios.post(`${getApiUrl()}/scripts/${activeScriptId}/versions`, {
+        label
+      });
+      if (res.data.success) {
+        const newVersion = res.data.data;
+        const mappedVersion: ScriptVersion = {
+          id: newVersion.id,
+          timestamp: new Date(newVersion.createdAt).getTime(),
+          content: newVersion.pages ? newVersion.pages.map((p: any) => p.content).join('\n\n') : '',
+          label: newVersion.label
+        };
+        setHistory([mappedVersion, ...history]);
+        setShortcutFeedback("Screenplay backed up manually to snapshots history!");
+        setTimeout(() => setShortcutFeedback(""), 4000);
+      }
+    } catch (err) {
+      console.error("Failed to create snapshot:", err);
+    }
   };
 
   // 3. SECURE TEXT BACKUP DOWNLOAD
@@ -393,13 +493,41 @@ DATE GENERATED: ${new Date().toLocaleString()}
   };
 
   // Add character manually helper
-  const handleAddCharacter = (name: string) => {
+  const handleAddCharacter = async (name: string) => {
     const uppercaseName = name.trim().toUpperCase();
-    if (uppercaseName && !knownCharacters.includes(uppercaseName)) {
-      setKnownCharacters([...knownCharacters, uppercaseName]);
-      setNewCharInput("");
-      setShortcutFeedback(`Character "${uppercaseName}" added to the screenplay roster.`);
-      setTimeout(() => setShortcutFeedback(""), 4000);
+    if (uppercaseName && !knownCharacters.includes(uppercaseName) && activeScriptId) {
+      try {
+        const res = await axios.post(`${getApiUrl()}/scripts/${activeScriptId}/characters`, {
+          name: uppercaseName
+        });
+        if (res.data.success) {
+          const newChar = res.data.data;
+          setKnownCharacters([...knownCharacters, uppercaseName]);
+          setCharacterIds(prev => ({ ...prev, [uppercaseName]: newChar.id }));
+          setNewCharInput("");
+          setShortcutFeedback(`Character "${uppercaseName}" added to the screenplay roster.`);
+          setTimeout(() => setShortcutFeedback(""), 4000);
+        }
+      } catch (err) {
+        console.error("Failed to add character:", err);
+      }
+    }
+  };
+
+  // Remove character helper
+  const handleRemoveCharacter = async (charName: string) => {
+    if (knownCharacters.length <= 1 || !activeScriptId) return;
+    const charId = characterIds[charName];
+    if (charId) {
+      try {
+        await axios.delete(`${getApiUrl()}/scripts/${activeScriptId}/characters/${charId}`);
+        setKnownCharacters(knownCharacters.filter(c => c !== charName));
+        const updatedIds = { ...characterIds };
+        delete updatedIds[charName];
+        setCharacterIds(updatedIds);
+      } catch (err) {
+        console.error("Failed to delete character:", err);
+      }
     }
   };
 
@@ -493,6 +621,17 @@ DATE GENERATED: ${new Date().toLocaleString()}
     setAiCoWriterOutput('');
     setTimeout(() => setShortcutFeedback(''), 4000);
   };
+
+  if (isLoadingScript) {
+    return (
+      <div className="min-h-screen bg-[#060608] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-3 border-[#00F5D4]/30 border-t-[#00F5D4] rounded-full animate-spin" />
+          <span className="text-[#8a8a93] text-xs font-mono uppercase tracking-widest">Loading Screenplay Studio...</span>
+        </div>
+      </div>
+    );
+  }
 
   const { heading, body } = getSceneParts();
 
@@ -648,10 +787,19 @@ DATE GENERATED: ${new Date().toLocaleString()}
 
             <button 
               className="p-1.5 rounded hover:bg-gray-200 text-gray-500 transition-colors" 
-              title="Toggle Layout Ribbon Mode"
+              title="Insert new page/scene"
               onClick={handleAddPage}
             >
               <Plus className="w-4 h-4 text-gray-600" />
+            </button>
+
+            <button 
+              className="p-1.5 rounded hover:bg-gray-200 hover:bg-rose-50 text-gray-500 hover:text-rose-600 transition-colors disabled:opacity-40 disabled:hover:bg-transparent" 
+              title="Remove current page/scene"
+              onClick={() => handleRemovePage(activePageIndex)}
+              disabled={pages.length <= 1}
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
 
@@ -900,6 +1048,14 @@ DATE GENERATED: ${new Date().toLocaleString()}
                       >
                         <Plus className="w-3.5 h-3.5" />
                       </button>
+                      <button 
+                        onClick={() => handleRemovePage(activePageIndex)}
+                        disabled={pages.length <= 1}
+                        className="w-7 h-7 rounded-none border border-gray-300 hover:border-gray-500 bg-white flex items-center justify-center text-gray-500 hover:text-gray-850 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-gray-500 transition-colors"
+                        title="Remove current screenplay scene page"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
 
@@ -1072,10 +1228,7 @@ DATE GENERATED: ${new Date().toLocaleString()}
                             {char}
                           </button>
                           <button 
-                            onClick={() => {
-                              if (knownCharacters.length <= 1) return;
-                              setKnownCharacters(knownCharacters.filter(c => c !== char));
-                            }} 
+                            onClick={() => handleRemoveCharacter(char)} 
                             className="text-[9px] text-red-400 hover:text-red-650 ml-1.5 font-sans"
                             title="Remove"
                           >
@@ -1132,15 +1285,25 @@ DATE GENERATED: ${new Date().toLocaleString()}
                         className="flex-1 bg-[#2a2a2f] border border-neutral-700 text-[11px] p-1 text-white focus:outline-none"
                       />
                       <button 
-                        onClick={() => {
-                          if (!newCommentText.trim()) return;
-                          setComments([...comments, {
-                            id: String(Date.now()),
-                            user: 'SCRITE WRITER',
-                            text: newCommentText,
-                            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                          }]);
-                          setNewCommentText("");
+                        onClick={async () => {
+                          if (!newCommentText.trim() || !activeScriptId) return;
+                          try {
+                            const res = await axios.post(`${getApiUrl()}/scripts/${activeScriptId}/comments`, {
+                              text: newCommentText.trim()
+                            });
+                            if (res.data.success) {
+                              const newComment = res.data.data;
+                              setComments([...comments, {
+                                id: newComment.id,
+                                user: newComment.user.name,
+                                text: newComment.text,
+                                time: new Date(newComment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                              }]);
+                              setNewCommentText("");
+                            }
+                          } catch (err) {
+                            console.error("Failed to add comment:", err);
+                          }
                         }}
                         className="bg-teal-650 hover:bg-teal-600 text-white font-black uppercase px-2.5 py-1 text-[9px]"
                       >
@@ -1473,11 +1636,22 @@ DATE GENERATED: ${new Date().toLocaleString()}
                     </div>
 
                     <button 
-                      onClick={() => {
+                      onClick={async () => {
                         const confirmRecover = window.confirm("Do you want to restore this snapshot over your current active page?");
-                        if (confirmRecover) {
-                          updatePageContent(snapshot.content);
-                          alert("Snapshot content restored below the active editor page!");
+                        if (confirmRecover && activeScriptId) {
+                          try {
+                            const res = await axios.post(`${getApiUrl()}/scripts/${activeScriptId}/versions/${snapshot.id}/restore`);
+                            if (res.data.success) {
+                              const restoredPages = res.data.data;
+                              setPages(restoredPages.map((p: any) => ({
+                                id: p.id,
+                                content: p.content
+                              })));
+                              alert("Snapshot content restored successfully!");
+                            }
+                          } catch (err) {
+                            console.error("Failed to restore snapshot:", err);
+                          }
                         }
                       }}
                       className="px-3 py-1.5 border border-blue-500 hover:bg-blue-600 hover:text-white text-blue-600 text-[10px] tracking-wider uppercase font-bold transition-all rounded-none self-center"

@@ -4,15 +4,18 @@ import {
   Settings, User, Key, Sliders, Type, HelpCircle, 
   Check, Save, RefreshCw, Cpu, Database, Info
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 export function SettingsWorkspace() {
+  const { user, updateProfile } = useAuth();
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const [profile, setProfile] = useState({
-    name: 'Arjun Krishna',
-    email: 'arjunkrishna9636@gmail.com',
-    role: 'Creative Director & Producer'
+    name: user?.name || '',
+    email: user?.email || '',
+    role: user?.role || ''
   });
 
   const [apiConfig, setApiConfig] = useState({
@@ -29,13 +32,36 @@ export function SettingsWorkspace() {
     autoSaveInterval: '1 min'
   });
 
-  const handleSave = () => {
+  // Sync state if user loads later
+  React.useEffect(() => {
+    if (user) {
+      setProfile({
+        name: user.name || '',
+        email: user.email || '',
+        role: user.role || ''
+      });
+    }
+  }, [user]);
+
+  const handleSave = async () => {
     setIsSaving(true);
-    setTimeout(() => {
+    setErrorMessage('');
+    try {
+      const res = await updateProfile({
+        name: profile.name,
+        role: profile.role
+      });
+      if (res.success) {
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
+      } else {
+        setErrorMessage(res.error || 'Failed to update profile.');
+      }
+    } catch (err) {
+      setErrorMessage('Failed to connect to authentication server.');
+    } finally {
       setIsSaving(false);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    }, 1000);
+    }
   };
 
   return (
@@ -51,6 +77,11 @@ export function SettingsWorkspace() {
           <p className="text-brand-light-grey text-sm mt-1">
             Configure your AI creative engine models, system profiles, and text editor interfaces.
           </p>
+          {errorMessage && (
+            <p className="text-red-400 text-xs mt-2 font-medium">
+              {errorMessage}
+            </p>
+          )}
         </div>
 
         <button 
