@@ -1,0 +1,33 @@
+Writer Duet provides a platform for screenwriting, scriptwriting and otherwriting projects. Multiple writers can work on the same document simultaneously.
+
+Projects Section : Management of the overall project
+Cards : it is used to separate scenes/sequences into cards
+Comments : this are is used to recieve feedback
+Analysis : This section is used to provide analysis of a script. There are different sections under thiis for different purposes such as formating, 
+           break down the location, characters, provide grammar checking and any errors
+Tools : Provides tools forr formating like underline, bold etc. It also allows writers to review or restore earlier versions. 
+        Accept or reject the changes that has been made by a collaborator
+
+
+Under each page there can be different sections. This is the element toolbar.It provides shortcuts for inserting different types of content into a screenplay. 
+Each button represents a different script element.:
+1) Scene : Creates a scene heading such as INT. HOUSE – NIGHT or EXT. STREET – DAY.
+2) Action : Describes what is happening in the scene, including movements, events, and actions.
+3) Characters : Adds a character name before their dialogue.
+4) Parens : Adds a parenthetical instruction describing how a character says something or a small action during dialogue. Example: (whispering)
+5) Dialogue : Add the words spoken by the character
+6) Transition : Add a transition between 2 scenes like CUT TO, FADE OUT etc
+7) Shot : Describes the shot type of the particular scene
+8) Text : Adds general text that doesn't fit a standard screenplay element.
+9) Note : Used to add a comment
+10) Outline : Adds or manages outline information for organizing the story.
+11) New Act : Marks the beginning of a new act in the screenplay.
+12) End Act :	Marks the end of an act.
+13) Lyrics : Used to enter song lyrics within the project.
+14) Image : Inserts an image into the document.
+15) Sequence : Creates or works with a sequence, which can contain a group of related scenes.
+16) Dual : Creates dual dialogue, allowing two characters' dialogue to appear side-by-side, typically when they are speaking simultaneously.
+
+
+there are also a lot of other features such as duplication of a project, exporting or importing a project, changing font such a styles, size, color etc. We ccan also 
+add or remove collaborators to work on the same project.
